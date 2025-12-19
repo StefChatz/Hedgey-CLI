@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.env
+.DS_Store
+bun.lockb
+coverage/
+.turbo/
+.cursor/
+.cursorrules
