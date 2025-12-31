@@ -2,7 +2,7 @@
   "name": "hedgey",
   "version": "1.0.0",
   "type": "module",
-  "description": "🦔 Aave position analyzer - Check health, exposure, and Greeks across chains",
+  "description": "🦔 Your DeFi hedging companion - Analyze Aave positions & Hyperliquid perpetuals",
   "bin": {
     "hedgey": "./dist/index.js"
   },
@@ -21,18 +21,32 @@
   },
   "keywords": [
     "aave",
+    "hyperliquid",
     "defi",
     "cli",
     "ethereum",
+    "polygon",
+    "arbitrum",
+    "optimism",
     "position-analysis",
     "risk-management",
-    "hedging"
+    "hedging",
+    "greeks",
+    "perpetuals",
+    "lending"
   ],
   "author": "Stefanos Chatzakis",
   "license": "MIT",
+  "homepage": "https://github.com/StefChatz/hedgey#readme",
+  "bugs": {
+    "url": "https://github.com/StefChatz/hedgey/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/StefChatz/hedgey"
+    "url": "git+https://github.com/StefChatz/hedgey.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@clack/prompts": "^0.7.0",

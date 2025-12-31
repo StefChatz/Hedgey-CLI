@@ -1,5 +1,5 @@
-import Table from 'cli-table3';
 import chalk from 'chalk';
+import Table from 'cli-table3';
 import type { Analysis } from '../types/position';
 
 export class TableFormatter {
@@ -33,6 +33,7 @@ export class TableFormatter {
 
   formatSummary(analysis: Analysis): string {
     const healthFactorDisplay = this.formatHealthFactor(analysis.healthFactor);
+    const netAPYDisplay = this.formatNetAPY(analysis.netAPY);
 
     return `
 ${chalk.bold.underline('POSITION SUMMARY')}
@@ -45,6 +46,7 @@ ${chalk.bold('Net Value:')}          ${chalk.cyan(this.formatUSD(analysis.netVal
 ${chalk.bold('Health Factor:')}      ${healthFactorDisplay}
 ${chalk.bold('Leverage:')}           ${analysis.leverage.toFixed(2)}x
 ${chalk.bold('Utilization:')}        ${analysis.utilizationRate.toFixed(1)}%
+${chalk.bold('Net APY:')}            ${netAPYDisplay}
 `;
   }
 
@@ -97,6 +99,14 @@ ${chalk.bold('Utilization:')}        ${analysis.utilizationRate.toFixed(1)}%
   }
 
   private formatUSD(amount: number): string {
-    return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (
+      '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    );
+  }
+
+  private formatNetAPY(apy: number): string {
+    const sign = apy >= 0 ? '+' : '';
+    const color = apy >= 0 ? chalk.green : chalk.red;
+    return color(`${sign}${apy.toFixed(2)}%`);
   }
 }

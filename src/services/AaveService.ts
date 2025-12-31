@@ -1,6 +1,15 @@
+import ky from 'ky';
 import { createPublicClient, http, type Address } from 'viem';
 import { ERC20_ABI, POOL_ABI, POOL_DATA_PROVIDER_ABI } from '../config/abis';
 import { CHAIN_CONFIG, type Chain } from '../config/chains';
+
+const AAVE_SUBGRAPH_URLS: Record<Chain, string> = {
+  ethereum: 'https://api.thegraph.com/subgraphs/name/aave/protocol-v3',
+  polygon: 'https://api.thegraph.com/subgraphs/name/aave/protocol-v3-polygon',
+  arbitrum: 'https://api.thegraph.com/subgraphs/name/aave/protocol-v3-arbitrum',
+  optimism: 'https://api.thegraph.com/subgraphs/name/aave/protocol-v3-optimism',
+  base: 'https://api.goldsky.com/api/public/project_clk74pd7lueg738tw9sjh79d6/subgraphs/aave-v3-base/1.0.0/gn',
+};
 
 interface RawUserReserveData {
   reserveAddress: Address;
@@ -18,8 +27,11 @@ interface RawUserReserveData {
 export class AaveService {
   private client;
   private config;
+  private chain: Chain;
+  private ratesCache: Map<string, { supplyRate: number; borrowRate: number }> = new Map();
 
   constructor(chain: Chain) {
+    this.chain = chain;
     this.config = CHAIN_CONFIG[chain];
 
     if (!this.config.alchemyKey) {
@@ -34,7 +46,47 @@ export class AaveService {
     });
   }
 
+  private async fetchRatesFromSubgraph(): Promise<void> {
+    const subgraphUrl = AAVE_SUBGRAPH_URLS[this.chain];
+    if (!subgraphUrl) return;
+
+    try {
+      const query = `{
+        reserves {
+          underlyingAsset
+          liquidityRate
+          variableBorrowRate
+        }
+      }`;
+
+      const response = await ky
+        .post(subgraphUrl, {
+          json: { query },
+          timeout: 10000,
+        })
+        .json<{
+          data: {
+            reserves: Array<{
+              underlyingAsset: string;
+              liquidityRate: string;
+              variableBorrowRate: string;
+            }>;
+          };
+        }>();
+
+      for (const reserve of response.data.reserves) {
+        const address = reserve.underlyingAsset.toLowerCase();
+        const supplyRate = Number(BigInt(reserve.liquidityRate)) / 1e27;
+        const borrowRate = Number(BigInt(reserve.variableBorrowRate)) / 1e27;
+        this.ratesCache.set(address, { supplyRate, borrowRate });
+      }
+    } catch {
+      console.warn('Failed to fetch rates from Aave subgraph');
+    }
+  }
+
   async getUserReserveData(userAddress: Address): Promise<RawUserReserveData[]> {
+    await this.fetchRatesFromSubgraph();
     const reserves = await this.getReservesList();
     const userReserves: RawUserReserveData[] = [];
 
@@ -106,11 +158,17 @@ export class AaveService {
       }),
     ]);
 
+    const cachedRates = this.ratesCache.get(asset.toLowerCase());
+    const supplyRate = cachedRates?.supplyRate ?? 0.01;
+    const borrowRate = cachedRates?.borrowRate ?? 0.02;
+    const supplyRateRay = BigInt(Math.floor(supplyRate * 1e27));
+    const borrowRateRay = BigInt(Math.floor(borrowRate * 1e27));
+
     return {
       currentATokenBalance: userData[0],
       currentVariableDebt: userData[2],
-      liquidityRate: reserveData[3],
-      variableBorrowRate: reserveData[4],
+      liquidityRate: supplyRateRay,
+      variableBorrowRate: borrowRateRay,
     };
   }
 

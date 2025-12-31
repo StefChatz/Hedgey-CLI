@@ -12,6 +12,8 @@ export interface HyperliquidPosition {
   leverageType: 'cross' | 'isolated';
   unrealizedPnl: number;
   notionalValue: number;
+  fundingRate: number;
+  fundingRateAnnualized: number;
 }
 
 interface RawHyperliquidPosition {
@@ -35,25 +37,44 @@ interface ClearinghouseState {
   };
 }
 
+interface AssetContext {
+  funding: string;
+  openInterest: string;
+  prevDayPx: string;
+  dayNtlVlm: string;
+  premium: string;
+  oraclePx: string;
+  markPx: string;
+  midPx: string;
+  impactPxs: string[];
+}
+
+interface MetaResponse {
+  universe: Array<{
+    name: string;
+    szDecimals: number;
+    maxLeverage: number;
+  }>;
+}
+
+type MetaAndAssetCtxsResponse = [MetaResponse, AssetContext[]];
+
 export class HyperliquidService {
+  private fundingRatesCache: Record<string, number> = {};
+
   async getUserPositions(address: Address): Promise<HyperliquidPosition[]> {
     try {
-      const response = await ky
-        .post(HYPERLIQUID_API, {
-          json: {
-            type: 'clearinghouseState',
-            user: address,
-          },
-          timeout: 15000,
-        })
-        .json<ClearinghouseState>();
+      const [clearinghouse, fundingRates] = await Promise.all([
+        this.fetchClearinghouseState(address),
+        this.getFundingRates(),
+      ]);
 
-      if (!response.assetPositions || response.assetPositions.length === 0) {
+      if (!clearinghouse.assetPositions || clearinghouse.assetPositions.length === 0) {
         return [];
       }
 
-      return response.assetPositions
-        .map(asset => this.transformPosition(asset))
+      return clearinghouse.assetPositions
+        .map(asset => this.transformPosition(asset, fundingRates))
         .filter(pos => pos.size !== 0);
     } catch (error) {
       if (error instanceof Error) {
@@ -63,11 +84,62 @@ export class HyperliquidService {
     }
   }
 
-  private transformPosition(raw: RawHyperliquidPosition): HyperliquidPosition {
+  private async fetchClearinghouseState(address: Address): Promise<ClearinghouseState> {
+    return ky
+      .post(HYPERLIQUID_API, {
+        json: {
+          type: 'clearinghouseState',
+          user: address,
+        },
+        timeout: 15000,
+      })
+      .json<ClearinghouseState>();
+  }
+
+  async getFundingRates(): Promise<Record<string, number>> {
+    if (Object.keys(this.fundingRatesCache).length > 0) {
+      return this.fundingRatesCache;
+    }
+
+    try {
+      const response = await ky
+        .post(HYPERLIQUID_API, {
+          json: {
+            type: 'metaAndAssetCtxs',
+          },
+          timeout: 15000,
+        })
+        .json<MetaAndAssetCtxsResponse>();
+
+      const [meta, assetCtxs] = response;
+      const rates: Record<string, number> = {};
+
+      for (let i = 0; i < meta.universe.length; i++) {
+        const assetName = meta.universe[i].name;
+        const ctx = assetCtxs[i];
+        if (ctx) {
+          rates[assetName] = parseFloat(ctx.funding);
+        }
+      }
+
+      this.fundingRatesCache = rates;
+      return rates;
+    } catch (error) {
+      console.warn('Failed to fetch Hyperliquid funding rates');
+      return {};
+    }
+  }
+
+  private transformPosition(
+    raw: RawHyperliquidPosition,
+    fundingRates: Record<string, number>
+  ): HyperliquidPosition {
     const size = parseFloat(raw.position.szi);
     const entryPrice = parseFloat(raw.position.entryPx);
     const leverage = raw.position.leverage.value;
     const unrealizedPnl = parseFloat(raw.position.unrealizedPnl);
+    const fundingRate = fundingRates[raw.position.coin] || 0;
+    const fundingRateAnnualized = fundingRate * 24 * 365 * 100;
 
     return {
       coin: raw.position.coin,
@@ -78,6 +150,8 @@ export class HyperliquidService {
       leverageType: raw.position.leverage.type === 'cross' ? 'cross' : 'isolated',
       unrealizedPnl,
       notionalValue: Math.abs(size) * entryPrice,
+      fundingRate,
+      fundingRateAnnualized,
     };
   }
 

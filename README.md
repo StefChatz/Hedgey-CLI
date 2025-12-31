@@ -1,62 +1,258 @@
-# 🦔 Hedgey
+<p align="center">
+  <img src="https://em-content.zobj.net/source/twitter/408/hedgehog_1f994.png" width="100" alt="Hedgey">
+</p>
 
-Your DeFi hedging companion - Analyze Aave positions with clarity and confidence
+<h1 align="center">Hedgey</h1>
 
-## Setup
+<p align="center">
+  <strong>Delta-neutral position analyzer for DeFi basis traders</strong>
+</p>
 
-### 1. Get Free Alchemy API Keys
+<p align="center">
+  <a href="https://www.npmjs.com/package/hedgey"><img src="https://img.shields.io/npm/v/hedgey.svg?style=flat-square&color=ff6b35" alt="npm"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="MIT"></a>
+  <img src="https://img.shields.io/badge/Aave-2e8b6e?style=flat-square&logo=aave&logoColor=white" alt="Aave">
+  <img src="https://img.shields.io/badge/Hyperliquid-0052ff?style=flat-square" alt="Hyperliquid">
+</p>
 
-1. Sign up at https://alchemy.com
-2. Create apps for each chain (Ethereum, Polygon, Arbitrum, Optimism)
-3. Copy API keys
+---
 
-### 2. Configure Environment
+## What is this?
+
+A CLI tool for traders running **basis trades** or **delta-neutral strategies** across Aave and Hyperliquid.
+
+**The strategy:**
+
+```
+Supply WETH on Aave      →  Long ETH exposure  →  Earn supply APY
+Short ETH on Hyperliquid →  Short ETH exposure →  Earn funding (when positive)
+─────────────────────────────────────────────────────────────────────────────
+Net exposure = 0         →  Delta neutral      →  Earn yield, no price risk
+```
+
+**Hedgey shows you:**
+
+- Net exposure per asset across both protocols
+- How well your perp positions hedge your Aave collateral
+- Combined APY from lending yield + funding rates
+- Risk metrics (health factor, leverage, Greeks)
+
+## Installation
 
 ```bash
-# Copy example env file
+bun add -g hedgey
+```
+
+## Quick Start
+
+```bash
+# 1. Set up Alchemy keys (free at alchemy.com)
 cp .env.example .env
 
-# Edit .env and add your Alchemy keys
-nano .env
+# 2. Add your keys to .env
+ALCHEMY_ETH_KEY=your_key
+ALCHEMY_ARBITRUM_KEY=your_key
+
+# 3. Analyze your positions
+hedgey hedge 0xYourAddress --chain arbitrum
 ```
 
-### 3. Install & Run
+## Commands
+
+### `hedgey hedge` — Cross-Protocol Analysis
+
+The main command. Combines Aave positions with Hyperliquid perps.
 
 ```bash
-# Install dependencies
-bun install
-
-# Test it works
-bun dev check 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
-
-# Build for production
-bun run build
+hedgey hedge 0xYourAddress --chain ethereum
 ```
 
-## Usage
+**Demo output:**
+
+```
+════════════════════════════════════════════════════════════════════════════════
+                      HEDGE ANALYSIS (Aave + Hyperliquid)
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────┬──────────────────────┬────────────────────────┬────────────────────┬──────────────┐
+│ Asset    │ Aave Position        │ Hyperliquid Position   │ Net Exposure       │ Hedge %      │
+├──────────┼──────────────────────┼────────────────────────┼────────────────────┼──────────────┤
+│ ETH      │ +10.5000             │ -10.4800               │ +0.0200            │ 99% ✓        │
+│          │ LONG                 │ SHORT 3x               │ LONG               │              │
+│          │ $38,325              │ $38,252                │ $73                │              │
+│          │                      │ +12.45% APY            │                    │              │
+├──────────┼──────────────────────┼────────────────────────┼────────────────────┼──────────────┤
+│ BTC      │ +0.8500              │ --                     │ +0.8500            │ 0%           │
+│          │ LONG                 │                        │ LONG               │              │
+│          │ $82,110              │                        │ $82,110            │              │
+└──────────┴──────────────────────┴────────────────────────┴────────────────────┴──────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+                              PORTFOLIO TOTALS
+────────────────────────────────────────────────────────────────────────────────
+
+  Aave Exposure:          $120,435.00
+  Aave Equity:            $45,200.00
+  HL Notional:            $38,252.00
+  HL Margin:              $12,750.00
+  Total Capital:          $57,950.00
+  Net Exposure:           $82,183.00 (LONG)
+  Hedge Ratio:            32%
+
+────────────────────────────────────────────────────────────────────────────────
+                              APY BREAKDOWN
+────────────────────────────────────────────────────────────────────────────────
+
+  Aave Net APY:           +2.34% (on Aave equity)
+  HL Funding APY:         +12.45% (on HL notional)
+  Combined Net APY:       +6.12% (on total capital)
+
+────────────────────────────────────────────────────────────────────────────────
+                           HEDGE EFFECTIVENESS
+────────────────────────────────────────────────────────────────────────────────
+
+  ✓ Perfectly Hedged (95-105%): ETH
+  ✗ Unhedged (<20%): BTC
+```
+
+### `hedgey check` — Aave Position Summary
+
+Analyze Aave positions without Hyperliquid data.
 
 ```bash
-# Check positions
-hedgey check 0xYourAddress
-
-# View Greeks
-hedgey greeks 0xYourAddress
-
-# Analyze hedge effectiveness (Aave + Hyperliquid)
-hedgey hedge 0xYourAddress
-
-# Specify chain
 hedgey check 0xYourAddress --chain polygon
-
-# Analyze hedge effectiveness (Aave + Hyperliquid)
-hedgey hedge 0xYourAddress --chain polygon
 ```
 
-## Features
+**Demo output:**
 
-- ✅ Health factor monitoring
-- ✅ Position exposure analysis
-- ✅ DeFi Greeks (delta, gamma, vega, theta)
-- ✅ Loop detection (recursive borrowing)
-- ✅ Multi-chain support (Ethereum, Polygon, Arbitrum, Optimism)
-- ✅ Powered by Alchemy (fast, reliable, FREE)
+```
+POSITION SUMMARY
+══════════════════════════════════════════════════════════════════════════
+
+Total Supplied:     $120,435.28
+Total Borrowed:     $75,235.00
+Net Value:          $45,200.28
+
+Health Factor:      1.85 🟡
+Leverage:           2.66x
+Utilization:        62.5%
+Net APY:            +2.34%
+
+┌────────────┬───────────────┬───────────────┬────────────────────┬───────────────┐
+│ Asset      │ Supplied      │ Borrowed      │ Net Position       │ USD Value     │
+├────────────┼───────────────┼───────────────┼────────────────────┼───────────────┤
+│ WETH       │ 10.5000       │ 0.0000        │ +10.5000 (LONG)    │ $38,325.00    │
+├────────────┼───────────────┼───────────────┼────────────────────┼───────────────┤
+│ USDC       │ 50,000.0000   │ 75,235.0000   │ -25235.0000 (SHORT)│ -$25,235.00   │
+├────────────┼───────────────┼───────────────┼────────────────────┼───────────────┤
+│ WBTC       │ 0.8500        │ 0.0000        │ +0.8500 (LONG)     │ $82,110.28    │
+└────────────┴───────────────┴───────────────┴────────────────────┴───────────────┘
+
+LOOPED POSITIONS DETECTED
+══════════════════════════════════════════════════════════════════════════
+
+⚠️  WETH - Recursive Position
+   Supplied: 15.0000 WETH
+   Borrowed: 4.5000 WETH
+   Effective Leverage: 1.43x
+```
+
+### `hedgey greeks` — Risk Metrics
+
+DeFi-adapted Greeks for your lending positions.
+
+```bash
+hedgey greeks 0xYourAddress --chain arbitrum
+```
+
+**Demo output:**
+
+```
+POSITION GREEKS
+══════════════════════════════════════════════════════════════════════════
+
+DELTA (Directional Exposure)
+Total USD Delta: $95,200.28
+
+By Asset:
+  WETH: +10.5000 ($38,325.00)
+  WBTC: +0.8500 ($82,110.28)
+  USDC: -25235.0000 (-$25,235.00)
+
+GAMMA (Leverage Exposure)
+Overall Leverage: 2.66x
+
+VEGA (Interest Rate Sensitivity)
+If rates increase by 1%:
+  Monthly impact: +$62.70
+  Yearly impact:  +$752.35
+
+THETA (Time Decay / Net Yield)
+  Daily:   +$2.90
+  Monthly: +$87.00
+  Yearly:  +$1,058.30
+```
+
+## Supported Chains
+
+| Chain    | Aave | Hyperliquid |
+| -------- | ---- | ----------- |
+| Ethereum | V3   | ✓           |
+| Arbitrum | V3   | ✓           |
+| Polygon  | V3   | ✓           |
+| Optimism | V3   | ✓           |
+
+## Configuration
+
+Create a `.env` file with your Alchemy API keys:
+
+```bash
+ALCHEMY_ETH_KEY=your_ethereum_key
+ALCHEMY_POLYGON_KEY=your_polygon_key
+ALCHEMY_ARBITRUM_KEY=your_arbitrum_key
+ALCHEMY_OPTIMISM_KEY=your_optimism_key
+```
+
+Get free keys at [alchemy.com](https://alchemy.com).
+
+## How It Works
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│    Aave     │     │ Hyperliquid │     │  CoinGecko  │
+│  (Alchemy)  │     │    (API)    │     │  (Prices)   │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                   │                   │
+       └───────────────────┼───────────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │   Position Transformer  │
+              │   Normalize all data    │
+              └────────────┬────────────┘
+                           │
+       ┌───────────────────┼───────────────────┐
+       │                   │                   │
+┌──────▼──────┐    ┌───────▼───────┐    ┌──────▼──────┐
+│  Exposure   │    │    Greeks     │    │   Hedge     │
+│  Analyzer   │    │  Calculator   │    │  Analyzer   │
+└──────┬──────┘    └───────┬───────┘    └──────┬──────┘
+       │                   │                   │
+       └───────────────────┼───────────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │    CLI Output Tables    │
+              └─────────────────────────┘
+```
+
+## Development
+
+```bash
+git clone https://github.com/StefChatz/hedgey.git
+cd hedgey
+bun install
+bun dev check 0xAddress
+```
+
+## License
+
+MIT © Stefanos Chatzakis

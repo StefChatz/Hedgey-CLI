@@ -33,6 +33,7 @@ program
   .description('Analyze hedge effectiveness (Aave + Hyperliquid)')
   .argument('<address>', 'Wallet address (0x...)')
   .option('-c, --chain <chain>', 'Aave chain', 'ethereum')
+  .option('--csv', 'Export analysis to CSV file')
   .action(hedgeCommand);
 
 program.parse();

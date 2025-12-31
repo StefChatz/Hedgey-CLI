@@ -14,6 +14,8 @@ export interface CombinedExposure {
     side: 'LONG' | 'SHORT' | 'NEUTRAL';
     leverage: number;
     unrealizedPnl: number;
+    fundingRate: number;
+    fundingRateAnnualized: number;
   };
   netExposure: {
     amount: number;
@@ -28,10 +30,16 @@ export interface HedgeAnalysis {
   byAsset: Record<string, CombinedExposure>;
   totals: {
     aaveTotalUSD: number;
+    aaveEquityUSD: number;
     hyperliquidTotalUSD: number;
+    hyperliquidMarginUSD: number;
+    totalCapitalUSD: number;
     netExposureUSD: number;
     overallHedgeRatio: number;
   };
+  aaveNetAPY: number;
+  hyperliquidFundingAPY: number;
+  combinedNetAPY: number;
   effectiveness: {
     perfectlyHedged: string[];
     partiallyHedged: string[];
@@ -53,12 +61,18 @@ export class HedgeAnalyzer {
       byAsset[asset] = this.analyzeAsset(asset, aavePositions, hyperliquidPositions, prices);
     }
 
-    const totals = this.calculateTotals(byAsset);
+    const totals = this.calculateTotals(byAsset, aavePositions, hyperliquidPositions);
     const effectiveness = this.categorizeEffectiveness(byAsset);
+    const aaveNetAPY = this.calculateAaveNetAPY(aavePositions);
+    const hyperliquidFundingAPY = this.calculateHyperliquidFundingAPY(hyperliquidPositions);
+    const combinedNetAPY = this.calculateCombinedNetAPY(aavePositions, hyperliquidPositions);
 
     return {
       byAsset,
       totals,
+      aaveNetAPY,
+      hyperliquidFundingAPY,
+      combinedNetAPY,
       effectiveness,
     };
   }
@@ -148,6 +162,8 @@ export class HedgeAnalyzer {
         side: 'NEUTRAL' as const,
         leverage: 0,
         unrealizedPnl: 0,
+        fundingRate: 0,
+        fundingRateAnnualized: 0,
       };
     }
 
@@ -157,6 +173,8 @@ export class HedgeAnalyzer {
       side: position.side,
       leverage: position.leverage,
       unrealizedPnl: position.unrealizedPnl,
+      fundingRate: position.fundingRate,
+      fundingRateAnnualized: position.fundingRateAnnualized,
     };
   }
 
@@ -182,17 +200,21 @@ export class HedgeAnalyzer {
     const aaveDirection = aaveUSD > 0 ? 'LONG' : 'SHORT';
 
     if (aaveDirection === 'LONG' && hyperliquidSide === 'SHORT') {
-      return Math.min((hyperliquidUSD / Math.abs(aaveUSD)) * 100, 100);
+      return (hyperliquidUSD / Math.abs(aaveUSD)) * 100;
     }
 
     if (aaveDirection === 'SHORT' && hyperliquidSide === 'LONG') {
-      return Math.min((hyperliquidUSD / Math.abs(aaveUSD)) * 100, 100);
+      return (hyperliquidUSD / Math.abs(aaveUSD)) * 100;
     }
 
     return 0;
   }
 
-  private calculateTotals(byAsset: Record<string, CombinedExposure>) {
+  private calculateTotals(
+    byAsset: Record<string, CombinedExposure>,
+    aavePositions: Position[],
+    hyperliquidPositions: HyperliquidPosition[]
+  ) {
     let aaveTotalUSD = 0;
     let hyperliquidTotalUSD = 0;
     let netExposureUSD = 0;
@@ -200,15 +222,31 @@ export class HedgeAnalyzer {
     for (const exposure of Object.values(byAsset)) {
       aaveTotalUSD += Math.abs(exposure.aaveExposure.netUSD);
       hyperliquidTotalUSD += Math.abs(exposure.hyperliquidExposure.sizeUSD);
-      netExposureUSD += Math.abs(exposure.netExposure.amountUSD);
+      netExposureUSD += exposure.netExposure.amountUSD;
     }
 
-    const overallHedgeRatio =
-      aaveTotalUSD > 0 ? Math.min(((aaveTotalUSD - netExposureUSD) / aaveTotalUSD) * 100, 100) : 0;
+    let aaveSupplied = 0;
+    let aaveBorrowed = 0;
+    for (const pos of aavePositions) {
+      aaveSupplied += pos.suppliedUSD;
+      aaveBorrowed += pos.borrowedUSD;
+    }
+    const aaveEquityUSD = aaveSupplied - aaveBorrowed;
+
+    let hyperliquidMarginUSD = 0;
+    for (const pos of hyperliquidPositions) {
+      hyperliquidMarginUSD += pos.leverage > 0 ? pos.notionalValue / pos.leverage : 0;
+    }
+
+    const totalCapitalUSD = aaveEquityUSD + hyperliquidMarginUSD;
+    const overallHedgeRatio = aaveTotalUSD > 0 ? (hyperliquidTotalUSD / aaveTotalUSD) * 100 : 0;
 
     return {
       aaveTotalUSD,
+      aaveEquityUSD,
       hyperliquidTotalUSD,
+      hyperliquidMarginUSD,
+      totalCapitalUSD,
       netExposureUSD,
       overallHedgeRatio,
     };
@@ -240,5 +278,92 @@ export class HedgeAnalyzer {
       unhedged,
       overHedged,
     };
+  }
+
+  private calculateAaveNetAPY(positions: Position[]): number {
+    let totalSuppliedUSD = 0;
+    let totalBorrowedUSD = 0;
+    let weightedSupplyAPY = 0;
+    let weightedBorrowAPY = 0;
+
+    for (const position of positions) {
+      totalSuppliedUSD += position.suppliedUSD;
+      totalBorrowedUSD += position.borrowedUSD;
+      weightedSupplyAPY += position.suppliedUSD * position.supplyAPR;
+      weightedBorrowAPY += position.borrowedUSD * position.borrowAPR;
+    }
+
+    if (totalSuppliedUSD === 0 && totalBorrowedUSD === 0) {
+      return 0;
+    }
+
+    const netEquity = totalSuppliedUSD - totalBorrowedUSD;
+    if (netEquity === 0) {
+      return 0;
+    }
+
+    const totalSupplyIncome = weightedSupplyAPY / 100;
+    const totalBorrowCost = weightedBorrowAPY / 100;
+    const netIncome = totalSupplyIncome - totalBorrowCost;
+
+    return (netIncome / netEquity) * 100;
+  }
+
+  private calculateHyperliquidFundingAPY(positions: HyperliquidPosition[]): number {
+    let totalNotional = 0;
+    let weightedFundingAPY = 0;
+
+    for (const position of positions) {
+      totalNotional += position.notionalValue;
+      const effectiveFundingAPY =
+        position.side === 'SHORT'
+          ? position.fundingRateAnnualized
+          : -position.fundingRateAnnualized;
+      weightedFundingAPY += position.notionalValue * effectiveFundingAPY;
+    }
+
+    if (totalNotional === 0) {
+      return 0;
+    }
+
+    return weightedFundingAPY / totalNotional;
+  }
+
+  private calculateCombinedNetAPY(
+    aavePositions: Position[],
+    hyperliquidPositions: HyperliquidPosition[]
+  ): number {
+    let aaveSuppliedUSD = 0;
+    let aaveBorrowedUSD = 0;
+    let weightedAaveAPY = 0;
+
+    for (const position of aavePositions) {
+      aaveSuppliedUSD += position.suppliedUSD;
+      aaveBorrowedUSD += position.borrowedUSD;
+      weightedAaveAPY +=
+        position.suppliedUSD * position.supplyAPR - position.borrowedUSD * position.borrowAPR;
+    }
+
+    const aaveEquity = aaveSuppliedUSD - aaveBorrowedUSD;
+    const aaveNetAPY = aaveEquity > 0 ? weightedAaveAPY / aaveEquity : 0;
+
+    let hlNotional = 0;
+    let weightedHLFunding = 0;
+    for (const position of hyperliquidPositions) {
+      const effectiveFunding =
+        position.side === 'SHORT'
+          ? position.fundingRateAnnualized
+          : -position.fundingRateAnnualized;
+      hlNotional += position.notionalValue;
+      weightedHLFunding += position.notionalValue * effectiveFunding;
+    }
+
+    const totalCapital = aaveEquity + hlNotional;
+    if (totalCapital <= 0) {
+      return 0;
+    }
+
+    const weightedTotal = aaveEquity * aaveNetAPY + weightedHLFunding;
+    return weightedTotal / totalCapital;
   }
 }

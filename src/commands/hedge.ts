@@ -11,6 +11,7 @@ import { validateAddress, validateChain } from '../utils/validators';
 
 interface HedgeOptions {
   chain?: string;
+  csv?: boolean;
 }
 
 export async function hedgeCommand(address: string, options: HedgeOptions): Promise<void> {
@@ -67,6 +68,11 @@ export async function hedgeCommand(address: string, options: HedgeOptions): Prom
 
     const formatter = new HedgeFormatter();
     console.log(formatter.format(hedgeAnalysis));
+
+    if (options.csv) {
+      const filename = formatter.exportToCSV(hedgeAnalysis, validAddress);
+      console.log(chalk.green(`\n✓ CSV exported to: ${chalk.bold(filename)}\n`));
+    }
 
     outro(chalk.green('Stay sharp! 🦔'));
   } catch (error) {

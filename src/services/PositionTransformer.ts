@@ -2,8 +2,7 @@ import { formatUnits } from 'viem';
 import type { Chain } from '../config/chains';
 import type { Position } from '../types/position';
 
-const RAY = 10n ** 27n;
-const SECONDS_PER_YEAR = 31536000n;
+const RAY = 1e27;
 
 interface RawUserReserveData {
   symbol: string;
@@ -54,7 +53,7 @@ export class PositionTransformer {
   }
 
   private convertRayToAPR(rayRate: bigint): number {
-    const apr = (rayRate * SECONDS_PER_YEAR * 100n) / RAY;
-    return parseFloat(apr.toString()) / 100;
+    const rateDecimal = Number(rayRate) / RAY;
+    return rateDecimal * 100;
   }
 }

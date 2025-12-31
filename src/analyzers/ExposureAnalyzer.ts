@@ -10,6 +10,7 @@ export class ExposureAnalyzer {
     const leverage = this.calculateLeverage(totalSuppliedUSD, netValueUSD);
     const utilizationRate = this.calculateUtilizationRate(totalBorrowedUSD, totalSuppliedUSD);
     const loops = this.detectLoops(positions);
+    const netAPY = this.calculateNetAPY(positions, netValueUSD);
 
     return {
       totalSuppliedUSD,
@@ -18,6 +19,7 @@ export class ExposureAnalyzer {
       healthFactor,
       leverage,
       utilizationRate,
+      netAPY,
       byAsset,
       loops,
     };
@@ -117,5 +119,23 @@ export class ExposureAnalyzer {
     }
 
     return loops;
+  }
+
+  private calculateNetAPY(positions: Position[], netValueUSD: number): number {
+    if (netValueUSD === 0) {
+      return 0;
+    }
+
+    let totalSupplyIncome = 0;
+    let totalBorrowCost = 0;
+
+    for (const position of positions) {
+      totalSupplyIncome += position.suppliedUSD * (position.supplyAPR / 100);
+      totalBorrowCost += position.borrowedUSD * (position.borrowAPR / 100);
+    }
+
+    const netIncome = totalSupplyIncome - totalBorrowCost;
+
+    return (netIncome / netValueUSD) * 100;
   }
 }

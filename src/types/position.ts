@@ -38,6 +38,7 @@ export const AnalysisSchema = z.object({
   healthFactor: z.number().positive(),
   leverage: z.number().positive(),
   utilizationRate: z.number(),
+  netAPY: z.number(),
   byAsset: z.record(
     z.string(),
     z.object({
